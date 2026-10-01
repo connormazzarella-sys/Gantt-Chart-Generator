@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gantt Chart Generator</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="toolbar" id="toolbar">
+    <h1>Gantt Chart Generator</h1>
+    <div class="toolbar-group">
+      <select id="add-task-group" title="Group for new task"></select>
+      <button id="add-task">+ Task</button>
+      <button id="add-group">+ Group</button>
+    </div>
+    <div class="toolbar-group">
+      <button id="import-json-btn">Import JSON</button>
+      <button id="import-csv-btn">Import CSV</button>
+      <input type="file" id="import-json-input" accept="application/json" hidden>
+      <input type="file" id="import-csv-input" accept=".csv" hidden>
+    </div>
+    <div class="toolbar-group">
+      <button id="export-json">Export JSON</button>
+      <button id="export-csv">Export CSV</button>
+      <button id="export-png">Export PNG</button>
+      <button id="export-pdf">Print / PDF</button>
+    </div>
+  </header>
+
+  <main id="chart-wrapper">
+    <svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg>
+  </main>
+
+  <aside id="group-panel" class="hidden">
+    <form id="group-form">
+      <h2 id="group-form-title">New Group</h2>
+      <input type="hidden" name="id">
+      <label>Name<input type="text" name="name" required></label>
+      <div class="edit-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="delete-group" class="danger" hidden>Delete</button>
+        <button type="button" id="close-group">Cancel</button>
+      </div>
+    </form>
+  </aside>
+
+  <aside id="edit-panel" class="hidden">
+    <form id="edit-form">
+      <h2>Edit Task</h2>
+      <input type="hidden" name="id">
+      <label>Name<input type="text" name="name" required></label>
+      <label>Group
+        <select name="group"></select>
+      </label>
+      <label>Subgroup (optional)<input type="text" name="subgroup" placeholder="e.g. Hardware"></label>
+      <label>Type
+        <select name="flag">
+          <option value="normal">Normal</option>
+          <option value="critical">Critical</option>
+          <option value="floating">Floating</option>
+        </select>
+      </label>
+      <label>Start<input type="date" name="start" required></label>
+      <label>End<input type="date" name="end" required></label>
+      <label>Progress (%)<input type="number" name="progress" min="0" max="100" step="5"></label>
+      <label class="checkbox"><input type="checkbox" name="milestone"> Milestone</label>
+      <label>Depends on (comma-separated task IDs)<input type="text" name="dependencies"></label>
+      <div class="edit-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="delete-task" class="danger">Delete</button>
+        <button type="button" id="close-edit">Cancel</button>
+      </div>
+    </form>
+  </aside>
+
+  <script src="js/dateUtils.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/sampleData.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/interactions.js"></script>
+  <script src="js/io.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
