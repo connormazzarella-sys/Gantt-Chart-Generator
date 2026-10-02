@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gantt Chart Generator</title>
+<style>
+:root {
+  --label-bg: #e3e7ea;
+  --border: #cfd8dc;
+  --accent: #1e88e5;
+  --danger: #e53935;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #263238;
+  background: #fafafa;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 6px;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  z-index: 20;
+}
+
+.dropdown-menu.hidden {
+  display: none;
+}
+
+.dropdown-menu button {
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 8px 12px;
+}
+
+.dropdown-menu button:hover {
+  background: #eceff1;
+}
+
+#view-range-group {
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #455a64;
+}
+
+#view-range-group input[type="date"] {
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover { background: #f0f4f8; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+button.primary:hover { background: #1976d2; }
+
+#chart-wrapper {
+  position: relative;
+  overflow: auto;
+  height: calc(100vh - 56px);
+  padding: 8px;
+}
+
+.chart-title-input {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid #9e9e9e;
+  border-radius: 4px 4px 0 0;
+  background: #ffffff;
+  font-weight: 800;
+  font-size: 15px;
+  color: #263238;
+  text-align: center;
+  padding: 4px 8px;
+}
+
+.chart-title-input:focus { outline: 2px solid #1e88e5; outline-offset: -2px; }
+
+#task-controls {
+  position: absolute;
+  top: 68px;
+  left: 8px;
+  z-index: 3;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid #9e9e9e;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  gap: 0;
+  background: #ffffff;
+}
+
+#task-controls select,
+#task-controls button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+svg#chart {
+  background: #ffffff;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+svg#chart.hidden { display: none; }
+
+#empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(100vh - 72px);
+  color: #90a4ae;
+  font-size: 14px;
+  text-align: center;
+}
+
+#empty-state.hidden { display: none; }
+#empty-state p { margin: 0; }
+
+.month-label { font-size: 12px; font-weight: 600; fill: #37474f; }
+.weekday-label { font-size: 9px; fill: #90a4ae; }
+.day-label { font-size: 10px; fill: #78909c; }
+.group-label { font-size: 13px; font-weight: 600; fill: #263238; }
+.task-label { font-size: 12px; fill: #37474f; }
+
+.row-btn { font-size: 11px; fill: #607d8b; cursor: pointer; user-select: none; }
+.row-btn:hover { fill: #1e88e5; }
+.row-btn-disabled { font-size: 11px; fill: #cfd8dc; user-select: none; }
+
+.task-bar .bar-hit { cursor: grab; }
+.task-bar .handle-left,
+.task-bar .handle-right { cursor: ew-resize; }
+.milestone-shape { cursor: grab; }
+
+#edit-panel, #group-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  height: 100%;
+  background: #ffffff;
+  border-left: 1px solid var(--border);
+  box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+  padding: 20px;
+  overflow-y: auto;
+  transition: transform 0.2s ease;
+  z-index: 10;
+}
+
+#edit-panel.hidden, #group-panel.hidden { transform: translateX(100%); }
+
+#edit-form label, #group-form label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+#edit-form input[type="text"],
+#edit-form input[type="date"],
+#edit-form input[type="number"],
+#edit-form select,
+#edit-form textarea,
+#group-form input[type="text"] {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+#edit-form label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#edit-form label.checkbox input { width: auto; }
+
+.progress-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.progress-row input[type="number"] { margin-top: 0; flex: 1; }
+.progress-row input:disabled { background: #f5f5f5; color: #78909c; }
+
+.dependencies-list {
+  max-height: 160px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.dependencies-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  padding: 2px 0;
+}
+
+.dependencies-list label input { width: auto; margin-top: 0; }
+
+.dependencies-list .empty-note { color: #78909c; font-style: italic; }
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media print {
+  @page { size: landscape; margin: 0.5cm; }
+  .toolbar, #edit-panel, #group-panel { display: none !important; }
+  #chart-wrapper { overflow: visible; height: auto; padding: 0; }
+  body { background: #fff; }
+}
+</style>
+</head>
+<body>
+  <header class="toolbar" id="toolbar">
+    <h1>Gantt Chart Generator</h1>
+    <div class="toolbar-row">
+      <div class="toolbar-group">
+        <button id="save-btn" class="primary">Save</button>
+      </div>
+      <div class="toolbar-group">
+        <button id="import-btn">Import</button>
+        <input type="file" id="import-input" accept=".json,.csv,.xls,application/json" hidden>
+      </div>
+      <div class="toolbar-group dropdown" id="export-dropdown">
+        <button id="export-btn">Export ▾</button>
+        <div class="dropdown-menu hidden" id="export-menu">
+          <button type="button" data-export="json">Export JSON</button>
+          <button type="button" data-export="csv">Export Excel</button>
+          <button type="button" data-export="png">Export PNG</button>
+          <button type="button" data-export="pdf">Print / PDF</button>
+        </div>
+      </div>
+      <div class="toolbar-group" id="view-range-group">
+        <label for="view-start">Timeline View</label>
+        <input type="date" id="view-start" title="View start">
+        <span>to</span>
+        <input type="date" id="view-end" title="View end">
+        <button id="view-reset" title="Show the full automatic range">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="chart-wrapper">
+    <input type="text" id="chart-title" class="chart-title-input" placeholder="Chart Title">
+    <div class="toolbar-group" id="task-controls">
+      <select id="add-task-group" title="Group for new task"></select>
+      <button id="add-group">+ Group</button>
+      <button id="add-task">+ Task</button>
+    </div>
+    <svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="empty-state" class="hidden">
+      <p>No groups or tasks yet.</p>
+      <p>Click <strong>+ Group</strong> to add a swimlane, then <strong>+ Task</strong> to start building your chart.</p>
+    </div>
+  </main>
+
+  <aside id="group-panel" class="hidden">
+    <form id="group-form">
+      <h2 id="group-form-title">New Group</h2>
+      <input type="hidden" name="id">
+      <label>Name<input type="text" name="name" required></label>
+      <div class="edit-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="delete-group" class="danger" hidden>Delete</button>
+        <button type="button" id="close-group">Cancel</button>
+      </div>
+    </form>
+  </aside>
+
+  <aside id="edit-panel" class="hidden">
+    <form id="edit-form">
+      <h2>Edit Task</h2>
+      <input type="hidden" name="id">
+      <label>Name<input type="text" name="name" required></label>
+      <label>Group
+        <select name="group"></select>
+      </label>
+      <label>Type
+        <select name="flag">
+          <option value="normal">Float</option>
+          <option value="critical">Critical</option>
+        </select>
+      </label>
+      <label>Start<input type="date" name="start" required></label>
+      <label>End<input type="date" name="end" required></label>
+      <label>Progress (%)
+        <div class="progress-row">
+          <input type="number" name="progress" min="0" max="100" step="5">
+        </div>
+      </label>
+      <label class="checkbox"><input type="checkbox" name="autoProgress"> Match today's date</label>
+      <label class="checkbox"><input type="checkbox" name="milestone"> Milestone</label>
+      <label class="checkbox"><input type="checkbox" name="outOfOffice"> Out of Office</label>
+      <label>Depends on
+        <div id="dependencies-list" class="dependencies-list"></div>
+      </label>
+      <label>Comment<textarea name="comment" rows="3" placeholder="Optional notes"></textarea></label>
+      <div class="edit-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="delete-task" class="danger">Delete</button>
+        <button type="button" id="close-edit">Cancel</button>
+      </div>
+    </form>
+  </aside>
+
+  <script>
+// Small date helpers. Dates are stored/serialized as "YYYY-MM-DD" strings.
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseDate(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function diffDays(a, b) {
+  const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((utcB - utcA) / DAY_MS);
+}
+
+// Percent of the start-end range elapsed as of today, clamped to 0-100.
+function autoProgressPercent(start, end) {
+  const totalDays = diffDays(parseDate(start), parseDate(end));
+  if (totalDays <= 0) return 100;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const elapsedDays = diffDays(parseDate(start), today);
+  return Math.round(Math.min(Math.max(elapsedDays / totalDays, 0), 1) * 100);
+}
+
+window.GanttDateUtils = { DAY_MS, parseDate, formatDate, addDays, diffDays, autoProgressPercent };
+})();
+  </script>
+  <script>
+// Central data store: { groups: [{id, name}], tasks: [{id, name, group, start, end, progress, dependencies, milestone}] }
+// Plain pub/sub so render.js can react to any change, plus localStorage autosave.
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const STORAGE_KEY = 'ganttChartData';
+
+let data = { groups: [], tasks: [] };
+const listeners = [];
+
+function getState() {
+  return data;
+}
+
+function setState(newData, { persist = true } = {}) {
+  data = newData;
+  if (persist) saveToLocalStorage();
+  listeners.forEach((fn) => fn(data));
+}
+
+function subscribe(fn) {
+  listeners.push(fn);
+}
+
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Autosave failed', e);
+  }
+}
+
+function loadFromLocalStorage() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+function getTask(id) {
+  return data.tasks.find((t) => t.id === id);
+}
+
+function updateTask(id, changes) {
+  const task = getTask(id);
+  if (!task) return;
+  Object.assign(task, changes);
+  setState(data);
+}
+
+function addTask(task) {
+  data.tasks.push(task);
+  setState(data);
+}
+
+function removeTask(id) {
+  data.tasks = data.tasks.filter((t) => t.id !== id);
+  data.tasks.forEach((t) => {
+    t.dependencies = (t.dependencies || []).filter((d) => d !== id);
+  });
+  setState(data);
+}
+
+function addGroup(group) {
+  data.groups.push(group);
+  setState(data);
+}
+
+function updateGroup(id, changes) {
+  const group = data.groups.find((g) => g.id === id);
+  if (!group) return;
+  Object.assign(group, changes);
+  setState(data);
+}
+
+function removeGroup(id) {
+  data.groups = data.groups.filter((g) => g.id !== id);
+  setState(data);
+}
+
+function moveGroup(id, direction) {
+  const idx = data.groups.findIndex((g) => g.id === id);
+  if (idx === -1) return;
+  const target = idx + direction;
+  if (target < 0 || target >= data.groups.length) return;
+  [data.groups[idx], data.groups[target]] = [data.groups[target], data.groups[idx]];
+  setState(data);
+}
+
+function moveTask(id, direction) {
+  const task = getTask(id);
+  if (!task) return;
+  const siblingIndices = [];
+  data.tasks.forEach((t, i) => { if (t.group === task.group) siblingIndices.push(i); });
+  const pos = siblingIndices.indexOf(data.tasks.indexOf(task));
+  const targetPos = pos + direction;
+  if (targetPos < 0 || targetPos >= siblingIndices.length) return;
+  const i1 = siblingIndices[pos];
+  const i2 = siblingIndices[targetPos];
+  [data.tasks[i1], data.tasks[i2]] = [data.tasks[i2], data.tasks[i1]];
+  setState(data);
+}
+
+function generateId(prefix = 't') {
+  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+window.GanttState = {
+  getState,
+  setState,
+  subscribe,
+  saveToLocalStorage,
+  loadFromLocalStorage,
+  getTask,
+  updateTask,
+  addTask,
+  removeTask,
+  addGroup,
+  updateGroup,
+  removeGroup,
+  moveGroup,
+  moveTask,
+  generateId,
+};
+})();
+  </script>
+  <script>
+// Renders the whole chart (label column + timeline) into a single SVG element.
+// Keeping everything in one SVG keeps PNG export and layout math simple.
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const { parseDate, addDays, diffDays, autoProgressPercent } = window.GanttDateUtils;
+
+let LABEL_WIDTH = 220;
+const MIN_LABEL_WIDTH = 220;
+const LABEL_CHAR_WIDTH = 7;
+const LABEL_PADDING = 110;
+const ROW_HEIGHT = 32;
+const GROUP_HEADER_HEIGHT = 28;
+// Tall enough for the chart-title box + task-controls block stacked in the label corner.
+const HEADER_HEIGHT = 88;
+const PX_PER_DAY = 28;
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function el(tag, attrs = {}, text) {
+  const node = document.createElementNS(SVG_NS, tag);
+  Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function computeLayout(state, collapsed, viewRange) {
+  collapsed = collapsed || new Set();
+  const tasks = state.tasks;
+  let minDate = null;
+  let maxDate = null;
+  tasks.forEach((t) => {
+    const s = parseDate(t.start);
+    const e = parseDate(t.end);
+    if (!minDate || s < minDate) minDate = s;
+    if (!maxDate || e > maxDate) maxDate = e;
+  });
+  if (!minDate) {
+    minDate = new Date();
+    maxDate = addDays(minDate, 30);
+  }
+  minDate = addDays(minDate, -2);
+  maxDate = addDays(maxDate, 3);
+  if (viewRange && viewRange.start) minDate = parseDate(viewRange.start);
+  if (viewRange && viewRange.end) maxDate = parseDate(viewRange.end);
+  const totalDays = Math.max(diffDays(minDate, maxDate), 1);
+
+  // Widen the label column to fit the longest name so labels are never cut off.
+  const labelTexts = [];
+  state.groups.forEach((g) => labelTexts.push(g.name));
+  tasks.forEach((t) => labelTexts.push(t.name));
+  const longest = labelTexts.reduce((max, s) => Math.max(max, (s || '').length), 0);
+  LABEL_WIDTH = Math.max(MIN_LABEL_WIDTH, longest * LABEL_CHAR_WIDTH + LABEL_PADDING);
+
+  const siblingsByGroup = {};
+  tasks.forEach((t) => {
+    (siblingsByGroup[t.group] = siblingsByGroup[t.group] || []).push(t);
+  });
+
+  const rows = [];
+  let y = HEADER_HEIGHT;
+  const knownGroupIds = new Set(state.groups.map((g) => g.id));
+
+  function pushTaskRow(task) {
+    const siblings = siblingsByGroup[task.group];
+    rows.push({
+      type: 'task',
+      task,
+      y,
+      height: ROW_HEIGHT,
+      isFirst: siblings[0] === task,
+      isLast: siblings[siblings.length - 1] === task,
+    });
+    y += ROW_HEIGHT;
+  }
+
+  function pushGroupTasks(groupTasks) {
+    groupTasks.forEach(pushTaskRow);
+  }
+
+  state.groups.forEach((group, gi) => {
+    const key = `g:${group.id}`;
+    const isCollapsed = collapsed.has(key);
+    rows.push({
+      type: 'group',
+      group,
+      y,
+      height: GROUP_HEADER_HEIGHT,
+      key,
+      isCollapsed,
+      isFirst: gi === 0,
+      isLast: gi === state.groups.length - 1,
+    });
+    y += GROUP_HEADER_HEIGHT;
+    if (isCollapsed) return;
+    pushGroupTasks(tasks.filter((t) => t.group === group.id));
+  });
+
+  const ungrouped = tasks.filter((t) => !knownGroupIds.has(t.group));
+  if (ungrouped.length) {
+    const key = 'g:__ungrouped';
+    const isCollapsed = collapsed.has(key);
+    rows.push({ type: 'group', group: { id: '__ungrouped', name: 'Ungrouped' }, y, height: GROUP_HEADER_HEIGHT, key, isCollapsed, isUngrouped: true });
+    y += GROUP_HEADER_HEIGHT;
+    if (!isCollapsed) pushGroupTasks(ungrouped);
+  }
+
+  const width = LABEL_WIDTH + totalDays * PX_PER_DAY + 20;
+  const height = y + 20;
+
+  function dateToX(date) {
+    return LABEL_WIDTH + diffDays(minDate, date) * PX_PER_DAY;
+  }
+  function xToDate(x) {
+    const days = Math.round((x - LABEL_WIDTH) / PX_PER_DAY);
+    return addDays(minDate, days);
+  }
+
+  return { minDate, maxDate, totalDays, rows, width, height, labelWidth: LABEL_WIDTH, dateToX, xToDate };
+}
+
+const MONTH_LABEL_MIN_WIDTH = 80; // approx px needed to fit "Mon YYYY" before it gets clipped/overlapped
+
+function drawGridlines(svg, layout) {
+  const { minDate, totalDays, dateToX, height } = layout;
+  let lastMonth = null;
+  let monthStartX = null;
+  for (let i = 0; i <= totalDays; i++) {
+    const date = addDays(minDate, i);
+    const x = dateToX(date);
+    const day = date.getDay();
+    const isMonthStart = date.getMonth() !== lastMonth;
+
+    if (day === 0 || day === 6) {
+      svg.appendChild(el('rect', { x, y: HEADER_HEIGHT, width: PX_PER_DAY, height: height - HEADER_HEIGHT, fill: '#f5f5f5' }));
+    }
+
+    if (isMonthStart) {
+      svg.appendChild(el('line', { x1: x, y1: 0, x2: x, y2: height, stroke: '#9e9e9e', 'stroke-width': 1.5 }));
+      // Skip the label if the timeline starts mid-month and this first (partial) stretch is too
+      // narrow to fit the text before the following month's label begins - avoids overlap.
+      const availableWidth = i === 0 ? Infinity : x - monthStartX;
+      if (availableWidth >= MONTH_LABEL_MIN_WIDTH) {
+        // The very first line sits right next to the floating Chart Title box, so give it extra
+        // breathing room to the right - matching the visual gap every other month label gets.
+        const labelOffset = i === 0 ? 20 : 4;
+        svg.appendChild(el('text', { x: x + labelOffset, y: 14, class: 'month-label' }, date.toLocaleString(undefined, { month: 'short', year: 'numeric' })));
+      }
+      lastMonth = date.getMonth();
+      monthStartX = x;
+    } else {
+      svg.appendChild(el('line', { x1: x, y1: 20, x2: x, y2: height, stroke: '#e0e0e0' }));
+    }
+    svg.appendChild(el('text', { x: x + PX_PER_DAY / 2, y: HEADER_HEIGHT / 2 + 4, class: 'weekday-label', 'text-anchor': 'middle' }, date.toLocaleDateString(undefined, { weekday: 'short' })));
+    svg.appendChild(el('text', { x: x + PX_PER_DAY / 2, y: HEADER_HEIGHT - 10, class: 'day-label', 'text-anchor': 'middle' }, date.getDate()));
+  }
+  svg.appendChild(el('line', { x1: LABEL_WIDTH, y1: 0, x2: LABEL_WIDTH, y2: height, stroke: '#9e9e9e', 'stroke-width': 1.5 }));
+}
+
+function drawTodayLine(svg, layout) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (today < layout.minDate || today > layout.maxDate) return;
+  const x = layout.dateToX(today);
+  svg.appendChild(el('line', { x1: x, y1: HEADER_HEIGHT, x2: x, y2: layout.height, stroke: '#e53935', 'stroke-width': 1.5, 'stroke-dasharray': '4,3' }));
+}
+
+function drawOutOfOfficeShading(svg, layout, state) {
+  state.tasks
+    .filter((t) => t.outOfOffice)
+    .forEach((t) => {
+      const rawX1 = layout.dateToX(parseDate(t.start));
+      const rawX2 = layout.dateToX(addDays(parseDate(t.end), 1));
+      // Clamp to the date area so the shading never spills into the label column.
+      const x1 = Math.max(rawX1, layout.labelWidth);
+      const x2 = Math.min(Math.max(rawX2, x1), layout.width);
+      if (x2 <= layout.labelWidth || x1 >= layout.width) return;
+      svg.appendChild(el('rect', { x: x1, y: HEADER_HEIGHT, width: x2 - x1, height: layout.height - HEADER_HEIGHT, fill: '#ef9a9a', 'fill-opacity': 0.25, 'pointer-events': 'none' }));
+      [rawX1, rawX2].filter((lx) => lx >= layout.labelWidth && lx <= layout.width).forEach((lx) => {
+        svg.appendChild(el('line', { x1: lx, y1: 0, x2: lx, y2: layout.height, stroke: '#ef9a9a', 'stroke-width': 1.5, 'stroke-dasharray': '4,3', 'pointer-events': 'none' }));
+      });
+    });
+}
+
+function drawMilestoneLines(svg, layout, state) {
+  state.tasks
+    .filter((t) => t.milestone)
+    .forEach((t) => {
+      const x = layout.dateToX(parseDate(t.start));
+      if (x < layout.labelWidth || x > layout.width) return;
+      svg.appendChild(el('line', { x1: x, y1: 0, x2: x, y2: layout.height, stroke: '#8e24aa', 'stroke-width': 1.5, 'stroke-dasharray': '2,3', 'pointer-events': 'none' }));
+    });
+}
+
+function iconBtn(svg, x, y, char, action, id, disabled) {
+  svg.appendChild(el('text', {
+    x, y, class: `row-btn${disabled ? ' row-btn-disabled' : ''}`,
+    'text-anchor': 'middle',
+    ...(disabled ? {} : { 'data-action': action, 'data-id': id }),
+  }, char));
+}
+
+const FLAG_COLORS = { critical: '#e53935', floating: '#fb8c00' };
+
+function darken(hex, amount) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const clamp = (v) => Math.min(255, Math.max(0, v));
+  const r = clamp((num >> 16) - amount);
+  const g = clamp(((num >> 8) & 0xff) - amount);
+  const b = clamp((num & 0xff) - amount);
+  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+}
+
+function drawRows(svg, layout) {
+  layout.rows.forEach((row) => {
+    if (row.type === 'group') {
+      const isReal = !row.isUngrouped;
+      svg.appendChild(el('rect', { x: 0, y: row.y, width: layout.width, height: row.height, fill: '#e3e7ea' }));
+      iconBtn(svg, 12, row.y + row.height / 2 + 4, row.isCollapsed ? '\u25B8' : '\u25BE', 'toggle-group', row.key);
+      svg.appendChild(el('text', { x: 26, y: row.y + row.height / 2 + 4, class: 'group-label' }, row.group.name));
+      if (isReal) {
+        iconBtn(svg, LABEL_WIDTH - 52, row.y + row.height / 2 + 4, '\u25B2', 'move-group-up', row.group.id, row.isFirst);
+        iconBtn(svg, LABEL_WIDTH - 34, row.y + row.height / 2 + 4, '\u25BC', 'move-group-down', row.group.id, row.isLast);
+        iconBtn(svg, LABEL_WIDTH - 12, row.y + row.height / 2 + 4, '\u270E', 'edit-group', row.group.id);
+      }
+    } else {
+      const t = row.task;
+      svg.appendChild(el('rect', { x: 0, y: row.y, width: LABEL_WIDTH, height: row.height, fill: '#ffffff' }));
+      if (FLAG_COLORS[t.flag]) {
+        svg.appendChild(el('circle', { cx: 16, cy: row.y + row.height / 2, r: 4, fill: FLAG_COLORS[t.flag] }));
+      }
+      if (t.milestone) {
+        const mcx = 16;
+        const mcy = row.y + row.height / 2;
+        const mr = 5;
+        svg.appendChild(el('path', { d: `M${mcx - mr},${mcy} L${mcx},${mcy - mr} L${mcx + mr},${mcy} L${mcx},${mcy + mr} Z`, fill: '#8e24aa' }));
+      }
+      svg.appendChild(el('text', { x: 26, y: row.y + row.height / 2 + 4, class: 'task-label', style: 'cursor:pointer', 'data-action': 'edit-task', 'data-id': t.id }, t.name));
+      iconBtn(svg, LABEL_WIDTH - 52, row.y + row.height / 2 + 4, '\u25B2', 'move-task-up', t.id, row.isFirst);
+      iconBtn(svg, LABEL_WIDTH - 34, row.y + row.height / 2 + 4, '\u25BC', 'move-task-down', t.id, row.isLast);
+      iconBtn(svg, LABEL_WIDTH - 12, row.y + row.height / 2 + 4, '\u270E', 'edit-task', t.id);
+    }
+  });
+}
+
+function drawDependencies(svg, layout, state) {
+  const rowByTaskId = {};
+  layout.rows.forEach((r) => {
+    if (r.type === 'task') rowByTaskId[r.task.id] = r;
+  });
+  state.tasks.forEach((t) => {
+    (t.dependencies || []).forEach((depId) => {
+      const fromRow = rowByTaskId[depId];
+      const toRow = rowByTaskId[t.id];
+      if (!fromRow || !toRow) return;
+      const x1 = layout.dateToX(addDays(parseDate(fromRow.task.end), 1));
+      const y1 = fromRow.y + fromRow.height / 2;
+      const x2 = layout.dateToX(parseDate(t.start));
+      const y2 = toRow.y + toRow.height / 2;
+      const midX = x1 + 12;
+      const d = `M${x1},${y1} L${midX},${y1} L${midX},${y2} L${x2},${y2}`;
+      svg.appendChild(el('path', { d, fill: 'none', stroke: '#607d8b', 'stroke-width': 1.5, 'marker-end': 'url(#arrow)' }));
+    });
+  });
+}
+
+function drawBarsAndMilestones(svg, layout, selectedTaskId) {
+  // Clip bars to the date area so a bar starting before the current view range
+  // doesn't render over the label column text on the left.
+  const clipWrap = el('g', { 'clip-path': 'url(#chart-area-clip)' });
+  layout.rows
+    .filter((r) => r.type === 'task')
+    .forEach((row) => {
+      const t = row.task;
+      const isSelected = t.id === selectedTaskId;
+      const x1 = layout.dateToX(parseDate(t.start));
+      const y = row.y + 4;
+      const h = row.height - 8;
+      const g = el('g', { class: `task-bar${isSelected ? ' selected' : ''}`, 'data-task-id': t.id });
+
+      if (t.milestone) {
+        const cx = x1;
+        const cy = row.y + row.height / 2;
+        const r = h / 2;
+        const fill = t.outOfOffice ? '#ffcdd2' : (FLAG_COLORS[t.flag] || '#5e35b1');
+        // Hit area bigger than the diamond itself so it's easy to click/drag.
+        g.appendChild(el('rect', { x: cx - r, y: cy - r, width: r * 2, height: r * 2, fill: 'transparent', class: 'bar-hit' }));
+        g.appendChild(el('path', { d: `M${cx - r},${cy} L${cx},${cy - r} L${cx + r},${cy} L${cx},${cy + r} Z`, fill: isSelected ? darken(fill, 30) : fill }));
+      } else {
+        const x2 = layout.dateToX(addDays(parseDate(t.end), 1));
+        const width = Math.max(x2 - x1, 4);
+        const progress = t.autoProgress ? autoProgressPercent(t.start, t.end) : Math.min(Math.max(t.progress || 0, 0), 100);
+        let baseFill = t.flag === 'critical' ? '#ef9a9a' : t.flag === 'floating' ? '#ffe0b2' : '#90a4ae';
+        let progressFill = t.flag === 'critical' ? '#e53935' : t.flag === 'floating' ? '#fb8c00' : '#1e88e5';
+        if (t.outOfOffice) { baseFill = '#ffcdd2'; progressFill = '#e57373'; }
+        if (isSelected) { baseFill = darken(baseFill, 24); progressFill = darken(progressFill, 24); }
+        const barAttrs = { x: x1, y, width, height: h, rx: 4, ry: 4, fill: baseFill };
+        if (t.flag === 'floating') barAttrs['stroke-dasharray'] = '3,2';
+        if (FLAG_COLORS[t.flag]) { barAttrs.stroke = isSelected ? darken(FLAG_COLORS[t.flag], 24) : FLAG_COLORS[t.flag]; barAttrs['stroke-width'] = 1.5; }
+        g.appendChild(el('rect', barAttrs));
+        if (progress > 0) {
+          g.appendChild(el('rect', { x: x1, y, width: (width * progress) / 100, height: h, rx: 4, ry: 4, fill: progressFill }));
+        }
+        g.appendChild(el('rect', { x: x1, y, width, height: h, rx: 4, ry: 4, fill: 'transparent', class: 'bar-hit' }));
+        g.appendChild(el('rect', { x: x1, y, width: 6, height: h, class: 'handle handle-left', fill: 'transparent', 'data-edge': 'start' }));
+        g.appendChild(el('rect', { x: x1 + width - 6, y, width: 6, height: h, class: 'handle handle-right', fill: 'transparent', 'data-edge': 'end' }));
+      }
+      clipWrap.appendChild(g);
+    });
+  svg.appendChild(clipWrap);
+}
+
+function renderChart(svg, state, collapsed, selectedTaskId, viewRange) {
+  const layout = computeLayout(state, collapsed, viewRange);
+  svg.setAttribute('width', layout.width);
+  svg.setAttribute('height', layout.height);
+  svg.innerHTML = '';
+
+  const defs = el('defs');
+  const marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+  marker.appendChild(el('path', { d: 'M0,0 L10,5 L0,10 z', fill: '#607d8b' }));
+  defs.appendChild(marker);
+  const clip = el('clipPath', { id: 'chart-area-clip' });
+  clip.appendChild(el('rect', { x: layout.labelWidth, y: 0, width: Math.max(layout.width - layout.labelWidth, 0), height: layout.height }));
+  defs.appendChild(clip);
+  svg.appendChild(defs);
+
+  drawGridlines(svg, layout);
+  drawTodayLine(svg, layout);
+  drawRows(svg, layout);
+  drawDependencies(svg, layout, state);
+  drawBarsAndMilestones(svg, layout, selectedTaskId);
+  drawOutOfOfficeShading(svg, layout, state);
+  drawMilestoneLines(svg, layout, state);
+
+  return layout;
+}
+
+window.GanttRender = { LABEL_WIDTH, ROW_HEIGHT, GROUP_HEADER_HEIGHT, HEADER_HEIGHT, PX_PER_DAY, computeLayout, renderChart };
+})();
+  </script>
+  <script>
+// Drag-to-move / drag-to-resize for task bars, plus click-to-edit.
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const { getState, updateTask } = window.GanttState;
+const { PX_PER_DAY } = window.GanttRender;
+const { formatDate, addDays, parseDate } = window.GanttDateUtils;
+
+const CLICK_THRESHOLD = 4;
+
+function attachInteractions(svg, onChange, onEditRequest) {
+  let dragCtx = null;
+
+  svg.addEventListener('pointerdown', (e) => {
+    const group = e.target.closest('.task-bar');
+    if (!group) return;
+    e.preventDefault();
+    const taskId = group.getAttribute('data-task-id');
+    const task = getState().tasks.find((t) => t.id === taskId);
+    if (!task || task.milestone) {
+      if (task && task.milestone) {
+        dragCtx = { taskId, mode: 'move', startX: e.clientX, origStart: task.start, origEnd: task.end, moved: false };
+        svg.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
+    let mode = 'move';
+    if (e.target.classList.contains('handle-left')) mode = 'resize-start';
+    else if (e.target.classList.contains('handle-right')) mode = 'resize-end';
+    dragCtx = { taskId, mode, startX: e.clientX, origStart: task.start, origEnd: task.end, moved: false };
+    svg.setPointerCapture(e.pointerId);
+  });
+
+  svg.addEventListener('pointermove', (e) => {
+    if (!dragCtx) return;
+    const dx = e.clientX - dragCtx.startX;
+    if (Math.abs(dx) > CLICK_THRESHOLD) dragCtx.moved = true;
+    const dayDelta = Math.round(dx / PX_PER_DAY);
+    const task = getState().tasks.find((t) => t.id === dragCtx.taskId);
+    if (!task) return;
+
+    if (dragCtx.mode === 'move') {
+      task.start = formatDate(addDays(parseDate(dragCtx.origStart), dayDelta));
+      task.end = formatDate(addDays(parseDate(dragCtx.origEnd), dayDelta));
+    } else if (dragCtx.mode === 'resize-start') {
+      const newStart = addDays(parseDate(dragCtx.origStart), dayDelta);
+      if (newStart < parseDate(task.end)) task.start = formatDate(newStart);
+    } else if (dragCtx.mode === 'resize-end') {
+      const newEnd = addDays(parseDate(dragCtx.origEnd), dayDelta);
+      if (newEnd > parseDate(task.start)) task.end = formatDate(newEnd);
+    }
+    onChange();
+  });
+
+  window.addEventListener('pointerup', () => {
+    if (!dragCtx) return;
+    const { taskId, moved } = dragCtx;
+    const task = getState().tasks.find((t) => t.id === taskId);
+    dragCtx = null;
+    if (task) updateTask(task.id, { start: task.start, end: task.end });
+    if (!moved && onEditRequest) onEditRequest(taskId);
+  });
+}
+
+window.GanttInteractions = { attachInteractions };
+})();
+  </script>
+  <script>
+// Import/export: JSON, CSV, and PNG (SVG serialized to canvas).
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const { setState, generateId } = window.GanttState;
+
+function exportJSON(state, filename, title) {
+  const payload = title ? { ...state, title } : state;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, filename || 'gantt-data.json');
+}
+
+// Tracks the on-disk file Save should overwrite (File System Access API; unsupported on file://, so Save then falls back to a normal download).
+let jsonFileHandle = null;
+
+function setJSONFileHandle(handle) {
+  jsonFileHandle = handle;
+}
+
+async function saveJSON(state, filename, title) {
+  const payload = title ? { ...state, title } : state;
+  const text = JSON.stringify(payload, null, 2);
+  if (window.showSaveFilePicker) {
+    try {
+      if (!jsonFileHandle) {
+        jsonFileHandle = await window.showSaveFilePicker({
+          suggestedName: filename || 'gantt-data.json',
+          types: [{ description: 'Gantt JSON', accept: { 'application/json': ['.json'] } }],
+        });
+      }
+      const writable = await jsonFileHandle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      jsonFileHandle = null;
+    }
+  }
+  const blob = new Blob([text], { type: 'application/json' });
+  downloadBlob(blob, filename || 'gantt-data.json');
+}
+
+function importJSONFile(file, cb) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      setState(data);
+      cb && cb(data);
+    } catch (e) {
+      alert('Invalid JSON file: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+const REPORT_HEADERS = ['Type', 'Group', 'Task', 'Start Date', 'End Date', 'Duration (days)', 'Completion %', 'Depends On', 'Comment'];
+// Lightened tints of the chart's task colors, so text stays readable as a cell fill.
+const REPORT_ROW_COLORS = { milestone: '#e1bee7', outOfOffice: '#ffe0b2', critical: '#ffcdd2', float: '#bbdefb' };
+
+function htmlEscape(v) {
+  if (v === undefined || v === null) v = '';
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// e.g. "Jan 15, 2026" instead of the raw ISO date, for human-readable reports.
+function humanDate(str) {
+  if (!str) return '';
+  const { parseDate } = window.GanttDateUtils;
+  return parseDate(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function taskTypeLabel(t) {
+  const parts = [];
+  if (t.milestone) parts.push('Milestone');
+  if (t.outOfOffice) parts.push('Out of Office');
+  if (!t.milestone && !t.outOfOffice) parts.push(t.flag === 'critical' ? 'Critical' : 'Float');
+  return parts.join(' / ');
+}
+
+// Priority mirrors taskTypeLabel: milestone, then out of office, then flag.
+function taskRowColor(t) {
+  if (t.milestone) return REPORT_ROW_COLORS.milestone;
+  if (t.outOfOffice) return REPORT_ROW_COLORS.outOfOffice;
+  return t.flag === 'critical' ? REPORT_ROW_COLORS.critical : REPORT_ROW_COLORS.float;
+}
+
+// Human-readable report, exported as an Excel-openable HTML table so headers can be
+// bolded and rows colored by task type (CSV has no formatting support).
+function exportCSV(state, filename) {
+  const { diffDays, parseDate } = window.GanttDateUtils;
+  const groupsById = new Map((state.groups || []).map((g) => [g.id, g.name]));
+  const tasksById = new Map(state.tasks.map((t) => [t.id, t.name]));
+
+  const sortedTasks = [...state.tasks].sort((a, b) => parseDate(a.start) - parseDate(b.start));
+  const headerCells = REPORT_HEADERS.map((h) => `<th style="font-weight:bold;background:#eceff1;border:1px solid #607d8b;padding:4px 8px;text-align:left;">${htmlEscape(h)}</th>`).join('');
+  const bodyRows = sortedTasks.map((t) => {
+    const duration = t.milestone ? 0 : Math.max(diffDays(parseDate(t.start), parseDate(t.end)), 0);
+    const dependsOn = (t.dependencies || []).map((id) => tasksById.get(id) || id).join('; ');
+    const cells = [
+      taskTypeLabel(t),
+      groupsById.get(t.group) || t.group || '',
+      t.name,
+      humanDate(t.start),
+      t.milestone ? 'N/A' : humanDate(t.end),
+      t.milestone ? 'N/A' : duration,
+      t.milestone ? 'N/A' : `${Math.round(t.progress || 0)}%`,
+      dependsOn,
+      t.comment || '',
+    ];
+    const color = taskRowColor(t);
+    // Background goes on each <td> (not the <tr>) so Excel doesn't extend the fill past the last header column.
+    // text-align is forced so Excel doesn't right-align numeric-looking cells (20, 60%) while leaving "N/A" left-aligned.
+    return `<tr>${cells.map((c) => `<td style="border:1px solid #607d8b;padding:4px 8px;background:${color};color:#212121;text-align:left;">${htmlEscape(c)}</td>`).join('')}</tr>`;
+  }).join('');
+  const html = `<html><head><meta charset="UTF-8"></head><body><table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  downloadBlob(blob, filename || 'gantt-data.xls');
+}
+
+// "Sep 20, 2026" (humanDate's output) back to ISO "2026-09-20"; 'N/A' passes through as-is.
+function parseHumanDate(str) {
+  if (!str || str === 'N/A') return '';
+  const { formatDate } = window.GanttDateUtils;
+  const d = new Date(str);
+  return isNaN(d) ? '' : formatDate(d);
+}
+
+// Reads back the human-readable Excel report produced by exportCSV. Lossy: ids and exact
+// duplicate-name dependency links aren't preserved, since the report only stores names.
+function importReportFile(file, cb) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const doc = new DOMParser().parseFromString(reader.result, 'text/html');
+    const table = doc.querySelector('table');
+    if (!table) { cb && cb(); return; }
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const colIndex = (name) => headers.indexOf(name);
+    const iType = colIndex('Type'), iGroup = colIndex('Group'), iTask = colIndex('Task');
+    const iStart = colIndex('Start Date'), iEnd = colIndex('End Date'), iProgress = colIndex('Completion %');
+    const iDepends = colIndex('Depends On'), iComment = colIndex('Comment');
+
+    const groupIds = new Map();
+    const nameToId = new Map();
+    const pendingDepends = [];
+    const tasks = [...table.querySelectorAll('tbody tr')].map((tr) => {
+      const cells = [...tr.querySelectorAll('td')].map((td) => td.textContent.trim());
+      const type = cells[iType] || '';
+      const groupName = cells[iGroup] || '';
+      if (!groupIds.has(groupName)) groupIds.set(groupName, generateId('g'));
+      const milestone = type.includes('Milestone');
+      const outOfOffice = type.includes('Out of Office');
+      const id = generateId();
+      const name = cells[iTask] || 'Untitled';
+      nameToId.set(name, id);
+      pendingDepends.push(cells[iDepends] || '');
+      return {
+        id,
+        name,
+        group: groupIds.get(groupName),
+        flag: type.includes('Critical') ? 'critical' : 'floating',
+        start: parseHumanDate(cells[iStart]),
+        end: milestone ? parseHumanDate(cells[iStart]) : parseHumanDate(cells[iEnd]),
+        progress: milestone ? 0 : Number((cells[iProgress] || '0').replace('%', '')) || 0,
+        dependencies: [],
+        milestone,
+        outOfOffice,
+        comment: cells[iComment] || '',
+      };
+    });
+    tasks.forEach((t, i) => {
+      t.dependencies = pendingDepends[i].split(';').map((s) => s.trim()).filter(Boolean)
+        .map((depName) => nameToId.get(depName)).filter(Boolean);
+    });
+
+    const groups = [...groupIds.entries()].map(([name, id]) => ({ id, name }));
+    setState({ groups, tasks });
+    cb && cb();
+  };
+  reader.readAsText(file);
+}
+
+function importCSVFile(file, cb) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const rows = parseCSV(reader.result);
+    const markerIndex = rows.findIndex((r) => r[0] === '##GROUPS');
+    const taskRows = markerIndex === -1 ? rows : rows.slice(0, markerIndex);
+    const groupRows = markerIndex === -1 ? [] : rows.slice(markerIndex + 2);
+
+    const [header, ...body] = taskRows;
+    const tasks = body.map((cols) => {
+      const obj = {};
+      header.forEach((h, i) => (obj[h.trim()] = cols[i]));
+      return {
+        id: obj.id || generateId(),
+        name: obj.name || 'Untitled',
+        group: obj.group || '',
+        flag: obj.flag || 'normal',
+        start: obj.start,
+        end: obj.end,
+        progress: Number(obj.progress) || 0,
+        dependencies: obj.dependencies ? obj.dependencies.split('|').filter(Boolean) : [],
+        milestone: obj.milestone === 'true' || obj.milestone === '1',
+        outOfOffice: obj.outOfOffice === 'true' || obj.outOfOffice === '1',
+      };
+    });
+
+    const namesById = new Map(groupRows.map(([id, name]) => [id, name]));
+    const groupIds = [...new Set(tasks.map((t) => t.group).filter(Boolean))];
+    const groups = groupIds.map((id) => ({ id, name: namesById.get(id) || id }));
+    setState({ groups, tasks });
+    cb && cb();
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (c === '\r') {
+    } else field += c;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.length && !(r.length === 1 && r[0] === ''));
+}
+
+function exportPNG(svg, filename) {
+  const serializer = new XMLSerializer();
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const svgString = serializer.serializeToString(clone);
+  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const width = Number(svg.getAttribute('width'));
+    const height = Number(svg.getAttribute('height'));
+    const canvas = document.createElement('canvas');
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((blob) => downloadBlob(blob, filename || 'gantt-chart.png'));
+  };
+  img.src = url;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+window.GanttIO = { exportJSON, saveJSON, setJSONFileHandle, importJSONFile, exportCSV, importCSVFile, importReportFile, exportPNG };
+})();
+  </script>
+  <script>
+// Plain script (not a module) so the app also works over a plain file:// URL.
+(function () {
+const { getState, setState, subscribe, loadFromLocalStorage, addTask, addGroup, updateGroup, removeGroup, moveGroup, moveTask, updateTask, removeTask, generateId } = window.GanttState;
+const { renderChart, HEADER_HEIGHT } = window.GanttRender;
+const { attachInteractions } = window.GanttInteractions;
+const { exportJSON, saveJSON, setJSONFileHandle, importJSONFile, exportCSV, importCSVFile, importReportFile, exportPNG } = window.GanttIO;
+const { autoProgressPercent } = window.GanttDateUtils;
+
+const svg = document.getElementById('chart');
+const editPanel = document.getElementById('edit-panel');
+const editForm = document.getElementById('edit-form');
+const groupPanel = document.getElementById('group-panel');
+const groupForm = document.getElementById('group-form');
+const groupFormTitle = document.getElementById('group-form-title');
+const deleteGroupBtn = document.getElementById('delete-group');
+const taskGroupSelect = document.getElementById('add-task-group');
+
+const COLLAPSED_KEY = 'ganttChartCollapsed';
+const collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]'));
+function saveCollapsed() {
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])); } catch (e) { }
+}
+
+const emptyState = document.getElementById('empty-state');
+let selectedTaskId = null;
+
+const VIEW_RANGE_KEY = 'ganttChartViewRange';
+const viewStartInput = document.getElementById('view-start');
+const viewEndInput = document.getElementById('view-end');
+let viewRange = null;
+try {
+  const saved = JSON.parse(localStorage.getItem(VIEW_RANGE_KEY) || 'null');
+  if (saved && (saved.start || saved.end)) {
+    viewRange = saved;
+    viewStartInput.value = saved.start || '';
+    viewEndInput.value = saved.end || '';
+  }
+} catch (e) { }
+
+function applyViewRange() {
+  const start = viewStartInput.value;
+  const end = viewEndInput.value;
+  if (start && end && start > end) viewRange = null;
+  else viewRange = (start || end) ? { start: start || null, end: end || null } : null;
+  try { localStorage.setItem(VIEW_RANGE_KEY, JSON.stringify(viewRange)); } catch (e) { }
+  render();
+}
+
+viewStartInput.addEventListener('change', applyViewRange);
+viewEndInput.addEventListener('change', applyViewRange);
+document.getElementById('view-reset').addEventListener('click', () => {
+  viewStartInput.value = '';
+  viewEndInput.value = '';
+  applyViewRange();
+});
+
+const CHART_TITLE_KEY = 'ganttChartTitle';
+const chartTitleInput = document.getElementById('chart-title');
+const taskControls = document.getElementById('task-controls');
+// Always start blank on open/refresh, matching the chart data; use Save/Import to bring a title back.
+chartTitleInput.addEventListener('input', () => {
+  try { localStorage.setItem(CHART_TITLE_KEY, chartTitleInput.value); } catch (e) { }
+});
+
+function exportBaseName(fallback) {
+  const name = chartTitleInput.value.trim().replace(/[\\/:*?"<>|]+/g, '').trim();
+  return name || fallback;
+}
+
+function render() {
+  const state = getState();
+  const isEmpty = state.groups.length === 0 && state.tasks.length === 0;
+  emptyState.classList.toggle('hidden', !isEmpty);
+  svg.classList.toggle('hidden', isEmpty);
+  const layout = isEmpty ? null : renderChart(svg, state, collapsed, selectedTaskId, viewRange);
+  const labelWidth = (layout ? layout.labelWidth : 220) - 2;
+  chartTitleInput.style.width = labelWidth + 'px';
+  chartTitleInput.style.height = '60px';
+  taskControls.style.width = labelWidth + 'px';
+  populateTaskGroupSelect();
+}
+
+function populateTaskGroupSelect() {
+  const previous = taskGroupSelect.value;
+  taskGroupSelect.innerHTML = '';
+  getState().groups.forEach((g) => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    taskGroupSelect.appendChild(opt);
+  });
+  if (getState().groups.some((g) => g.id === previous)) taskGroupSelect.value = previous;
+}
+
+function populateGroupOptions(selected) {
+  const select = editForm.elements['group'];
+  select.innerHTML = '';
+  getState().groups.forEach((g) => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    if (g.id === selected) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function populateDependencyOptions(currentTaskId, selectedIds) {
+  const list = document.getElementById('dependencies-list');
+  list.innerHTML = '';
+  const others = getState().tasks.filter((t) => t.id !== currentTaskId);
+  if (!others.length) {
+    list.innerHTML = '<span class="empty-note">No other tasks yet</span>';
+    return;
+  }
+  others.forEach((t) => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = t.id;
+    input.checked = selectedIds.includes(t.id);
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(t.name));
+    list.appendChild(label);
+  });
+}
+
+function openEditor(taskId) {
+  const task = getState().tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  selectedTaskId = taskId;
+  render();
+  populateGroupOptions(task.group);
+  editForm.elements['id'].value = task.id;
+  editForm.elements['name'].value = task.name;
+  editForm.elements['flag'].value = task.flag || 'normal';
+  editForm.elements['start'].value = task.start;
+  editForm.elements['end'].value = task.end;
+  editForm.elements['autoProgress'].checked = !!task.autoProgress;
+  editForm.elements['progress'].value = task.autoProgress ? autoProgressPercent(task.start, task.end) : (task.progress || 0);
+  editForm.elements['progress'].disabled = !!task.autoProgress;
+  editForm.elements['milestone'].checked = !!task.milestone;
+  editForm.elements['outOfOffice'].checked = !!task.outOfOffice;
+  editForm.elements['comment'].value = task.comment || '';
+  populateDependencyOptions(task.id, task.dependencies || []);
+  editPanel.classList.remove('hidden');
+}
+
+function closeEditor() {
+  editPanel.classList.add('hidden');
+  selectedTaskId = null;
+  render();
+}
+
+document.getElementById('close-edit').addEventListener('click', closeEditor);
+
+function refreshAutoProgressDisplay() {
+  if (!editForm.elements['autoProgress'].checked) return;
+  const start = editForm.elements['start'].value;
+  const end = editForm.elements['end'].value;
+  if (!start || !end) return;
+  editForm.elements['progress'].value = autoProgressPercent(start, end);
+}
+
+editForm.elements['autoProgress'].addEventListener('change', () => {
+  editForm.elements['progress'].disabled = editForm.elements['autoProgress'].checked;
+  refreshAutoProgressDisplay();
+});
+editForm.elements['start'].addEventListener('change', refreshAutoProgressDisplay);
+editForm.elements['end'].addEventListener('change', refreshAutoProgressDisplay);
+
+editForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = editForm.elements['id'].value;
+  updateTask(id, {
+    name: editForm.elements['name'].value,
+    group: editForm.elements['group'].value,
+    flag: editForm.elements['flag'].value,
+    start: editForm.elements['start'].value,
+    end: editForm.elements['end'].value,
+    autoProgress: editForm.elements['autoProgress'].checked,
+    progress: editForm.elements['autoProgress'].checked
+      ? autoProgressPercent(editForm.elements['start'].value, editForm.elements['end'].value)
+      : Number(editForm.elements['progress'].value),
+    milestone: editForm.elements['milestone'].checked,
+    outOfOffice: editForm.elements['outOfOffice'].checked,
+    dependencies: Array.from(document.querySelectorAll('#dependencies-list input:checked')).map((el) => el.value),
+    comment: editForm.elements['comment'].value.trim(),
+  });
+  closeEditor();
+});
+
+document.getElementById('delete-task').addEventListener('click', () => {
+  removeTask(editForm.elements['id'].value);
+  closeEditor();
+});
+
+document.getElementById('add-task').addEventListener('click', () => {
+  const state = getState();
+  if (!state.groups.length) { alert('Add a group first, then add a task to it.'); return; }
+  const today = new Date().toISOString().slice(0, 10);
+  const group = taskGroupSelect.value || state.groups[0]?.id || '';
+  const id = generateId();
+  addTask({ id, name: 'New Task', group, start: today, end: today, progress: 0, autoProgress: false, dependencies: [], milestone: false, outOfOffice: false });
+  openEditor(id);
+  editForm.elements['name'].focus();
+  editForm.elements['name'].select();
+});
+
+document.getElementById('add-group').addEventListener('click', () => {
+  groupForm.reset();
+  groupForm.elements['id'].value = '';
+  groupFormTitle.textContent = 'New Group';
+  deleteGroupBtn.hidden = true;
+  groupPanel.classList.remove('hidden');
+  groupForm.elements['name'].focus();
+});
+
+function openGroupEditor(id) {
+  const group = getState().groups.find((g) => g.id === id);
+  if (!group) return;
+  groupForm.elements['id'].value = group.id;
+  groupForm.elements['name'].value = group.name;
+  groupFormTitle.textContent = 'Edit Group';
+  deleteGroupBtn.hidden = false;
+  groupPanel.classList.remove('hidden');
+  groupForm.elements['name'].focus();
+}
+
+document.getElementById('close-group').addEventListener('click', () => groupPanel.classList.add('hidden'));
+
+groupForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = groupForm.elements['id'].value;
+  const name = groupForm.elements['name'].value.trim();
+  if (!name) return;
+  if (id) updateGroup(id, { name });
+  else addGroup({ id: generateId('g'), name });
+  groupPanel.classList.add('hidden');
+});
+
+deleteGroupBtn.addEventListener('click', () => {
+  const id = groupForm.elements['id'].value;
+  if (id) removeGroup(id);
+  groupPanel.classList.add('hidden');
+});
+
+svg.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.getAttribute('data-action');
+  const id = btn.getAttribute('data-id');
+  if (action === 'toggle-group') {
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    saveCollapsed();
+    render();
+  } else if (action === 'move-group-up') moveGroup(id, -1);
+  else if (action === 'move-group-down') moveGroup(id, 1);
+  else if (action === 'edit-group') openGroupEditor(id);
+  else if (action === 'move-task-up') moveTask(id, -1);
+  else if (action === 'move-task-down') moveTask(id, 1);
+  else if (action === 'edit-task') openEditor(id);
+});
+
+document.getElementById('save-btn').addEventListener('click', () => saveJSON(getState(), exportBaseName('gantt-data') + '.json', chartTitleInput.value));
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  document.getElementById('export-menu').classList.toggle('hidden');
+});
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('export-dropdown').contains(e.target)) {
+    document.getElementById('export-menu').classList.add('hidden');
+  }
+});
+document.getElementById('export-menu').addEventListener('click', (e) => {
+  const type = e.target.dataset.export;
+  if (!type) return;
+  if (type === 'json') exportJSON(getState(), exportBaseName('gantt-data') + '.json', chartTitleInput.value);
+  else if (type === 'csv') exportCSV(getState(), exportBaseName('gantt-data') + '.xls');
+  else if (type === 'png') exportPNG(svg, exportBaseName('gantt-chart') + '.png');
+  else if (type === 'pdf') window.print();
+  document.getElementById('export-menu').classList.add('hidden');
+});
+
+document.getElementById('import-btn').addEventListener('click', async () => {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'Gantt files', accept: { 'application/json': ['.json'], 'text/csv': ['.csv'], 'application/vnd.ms-excel': ['.xls'] } }],
+      });
+      const file = await handle.getFile();
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.csv')) {
+        setJSONFileHandle(null);
+        importCSVFile(file);
+      } else if (lowerName.endsWith('.xls')) {
+        setJSONFileHandle(null);
+        importReportFile(file);
+      } else {
+        setJSONFileHandle(handle);
+        importJSONFile(file, (data) => {
+          chartTitleInput.value = data.title || '';
+          try { localStorage.setItem(CHART_TITLE_KEY, chartTitleInput.value); } catch (err) { }
+        });
+      }
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+  }
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) { e.target.value = ''; return; }
+  setJSONFileHandle(null);
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith('.csv')) {
+    importCSVFile(file);
+  } else if (lowerName.endsWith('.xls')) {
+    importReportFile(file);
+  } else {
+    importJSONFile(file, (data) => {
+      chartTitleInput.value = data.title || '';
+      try { localStorage.setItem(CHART_TITLE_KEY, chartTitleInput.value); } catch (err) { }
+    });
+  }
+  e.target.value = '';
+});
+
+subscribe(render);
+attachInteractions(svg, render, openEditor);
+
+// Always start blank on open/refresh (plus one placeholder group); autosave
+// still runs in the background (via setState's default persist:true) in case
+// of a crash, but it is never restored automatically — use Save/Import to
+// bring data back.
+setState({ groups: [{ id: generateId('g'), name: 'Sample' }], tasks: [] }, { persist: false });
+})();
+  </script>
+</body>
+</html>
